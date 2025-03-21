@@ -1,0 +1,6 @@
+/.vscode
+/check
+lu-omp
+lu-omp-debug
+lu-omp-serial
+problems.txt
