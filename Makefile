@@ -2,13 +2,11 @@ EXEC=lu-omp
 OBJ =  $(EXEC) $(EXEC)-debug  $(EXEC)-serial
 
 MATRIX_SIZE=8000
-#MATRIX_SIZE=6
 MATRIX_CHECK_SIZE=100
 W :=`grep processor /proc/cpuinfo | wc -l`
 
 CHECKER=inspxe-cl -collect=ti3 -r check
 VIEWER=inspxe-gui check
-REPORTER=inspxe-cl -report problems -result-dir=./check/check.inspxe > problems.txt
 
 # flags
 OPT=-O2 -g
@@ -52,6 +50,3 @@ view:
 
 clean:
 	/bin/rm -rf $(OBJ) check
-
-report: 
-	$(REPORTER)
