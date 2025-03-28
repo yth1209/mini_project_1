@@ -8,7 +8,10 @@ W :=`grep processor /proc/cpuinfo | wc -l`
 
 CHECKER=inspxe-cl -collect=ti3 -r check
 VIEWER=inspxe-gui check
-REPORTER=inspxe-cl -report problems -result-dir=./check/check.inspxe > problems.txt
+REPORTER_PROBLEM=inspxe-cl -report problems -result-dir=./check/check.inspxe > reports/problems.txt
+REPORTER_SUMMARY=inspxe-cl -report summary -result-dir=./check/check.inspxe > reports/summary.txt
+REPORTER_OBSERVATIONS=inspxe-cl -report observations -result-dir=./check/check.inspxe > reports/observations.txt
+REPORTER_STATUS=inspxe-cl -report status -result-dir=./check/check.inspxe > reports/status.txt
 
 # flags
 OPT=-O2 -g
@@ -51,7 +54,12 @@ view:
 
 
 clean:
-	/bin/rm -rf $(OBJ) check
+	/bin/rm -rf $(OBJ) check reports/*
 
 report: 
-	$(REPORTER)
+	mkdir -p reports; \
+	$(REPORTER_PROBLEM); \
+	$(REPORTER_SUMMARY); \
+	$(REPORTER_OBSERVATIONS); \
+	$(REPORTER_STATUS)
+

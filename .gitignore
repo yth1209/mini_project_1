@@ -1,10 +1,13 @@
 /.vscode
-/check
-/check/lu-omp
-/check/lu-omp-debug
-/check/lu-omp-serial
-/check/problems*.txt
 
+/openmp/lu-omp
+/openmp/lu-omp-debug
+/openmp/lu-omp-serial
+/openmp/problems*.txt
+/openmp/check
+/openmp/reports
+
+/check
 lu-omp
 lu-omp-debug
 lu-omp-serial
