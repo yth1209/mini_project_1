@@ -181,6 +181,7 @@ void lu_decomposition(double **A, double **L, double **U, int *P, int matrix_siz
     double max = 0.0;
     int k_prime = k;
 
+    // Find the maximum element in the k-th column
     #pragma omp parallel shared(max, k_prime)
     { 
       // Find the maximum element in the k-th column
