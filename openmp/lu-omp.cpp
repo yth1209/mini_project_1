@@ -11,11 +11,12 @@ void print_array(double **A, int matrix_size);
 void measure_time(function<void()> function);
 double** multiply_two_array(double** A, double** B, int matrix_size);
 double** permute_A(double **A, int *P, int matrix_size);
+double compare_two_array(double** A, double** B, int matrix_size);
 
 double** init_A(int matrix_size);
 int* init_P(int matrix_size);
 double** init_diagonal_array(int matrix_size);
-void lu_decomposition(double **A, double **L, double **U, int *P, int matrix_size);
+void lu_decomposition(double **A, int *P, int matrix_size);
 
 int main(int argc, char **argv)
 {
@@ -35,9 +36,38 @@ int main(int argc, char **argv)
   double **L = init_diagonal_array(matrix_size);
   double **U = init_diagonal_array(matrix_size);
 
+  double **A_copy = new double*[matrix_size];
+  for (int i = 0; i < matrix_size; i++) {
+    A_copy[i] = new double[matrix_size];
+  }
+  #pragma omp parallel for
+  for (int i = 0; i < matrix_size; i++) {
+    for (int j = 0; j < matrix_size; j++) {
+      A_copy[i][j] = A[i][j];
+    }
+  }
+
   measure_time([&]() {
-    lu_decomposition(A, L, U, P, matrix_size);
+    lu_decomposition(A, P, matrix_size);
   });
+
+  #pragma omp parallel for
+  for (int i = 0; i < matrix_size; i++) {
+    for (int j = 0; j < matrix_size; j++) {
+      if (i > j) {
+        L[i][j] = A[i][j];
+        U[i][j] = 0;
+      } else if (i == j) {
+        L[i][j] = 1;
+        U[i][j] = A[i][j];
+      } else {
+        L[i][j] = 0;
+        U[i][j] = A[i][j];
+      }
+    }
+  }
+
+  cout << compare_two_array(multiply_two_array(L, U, matrix_size), permute_A(A_copy,P,matrix_size), matrix_size) << endl;
 
 
   // Free allocated memory
@@ -119,6 +149,22 @@ double** permute_A(double **A, int *P, int matrix_size){
   return B;
 }
 
+double compare_two_array(double** A, double** B, int matrix_size){
+  double diff = 0.0;
+
+  #pragma omp parallel shared(diff)
+  {
+    #pragma omp for reduction(+:diff)
+    for (int i = 0; i < matrix_size; i++){
+      for (int j = 0; j < matrix_size; j++){
+        diff += abs(A[i][j] - B[i][j]);
+      }
+    }
+  }
+
+  return diff / matrix_size;
+}
+
 double** init_A(int matrix_size){
   double **A = new double*[matrix_size];
 
@@ -175,7 +221,7 @@ double ** init_diagonal_array(int matrix_size){
   return A;
 }
 
-void lu_decomposition(double **A, double **L, double **U, int *P, int matrix_size) {
+void lu_decomposition(double **A, int *P, int matrix_size) {
   for (int k = 0; k < matrix_size; k++) {
     // Pivoting
     double max = 0.0;
@@ -217,26 +263,19 @@ void lu_decomposition(double **A, double **L, double **U, int *P, int matrix_siz
     if(k!=k_prime) {
       swap(P[k], P[k_prime]);
       swap(A[k], A[k_prime]);
-      #pragma omp parallel for
-      for (int j = 0; j < k; j++) {
-        swap(L[k][j], L[k_prime][j]);
-      }
     }
 
-    // Update U and L
-    U[k][k] = A[k][k];
-    #pragma omp parallel for
-    for (int i = k + 1; i < matrix_size; i++) {
-      L[i][k] = A[i][k] / U[k][k];
-      U[k][i] = A[k][i];
-    }
+    double pivot = A[k][k];
 
-    // Update A
     #pragma omp parallel for
     for (int i = k + 1; i < matrix_size; i++) {
+      A[i][k] /= pivot;
+      double L_ik = A[i][k];
+      // U의 역할을 하는 A의 상삼각 부분을 갱신합니다.
       for (int j = k + 1; j < matrix_size; j++) {
-        A[i][j] -= L[i][k] * U[k][j];
+          A[i][j] -= L_ik * A[k][j];
       }
     }
+
   }
 }
