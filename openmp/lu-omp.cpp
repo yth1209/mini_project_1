@@ -9,6 +9,7 @@ using namespace std;
 void usage(const char *name);
 void print_array(double **A, int matrix_size);
 void measure_time(function<void()> function);
+
 double** multiply_two_array(double** A, double** B, int matrix_size);
 double** permute_A(double **A, int *P, int matrix_size);
 double compare_two_array(double** A, double** B, int matrix_size);
@@ -16,7 +17,9 @@ double compare_two_array(double** A, double** B, int matrix_size);
 double** init_A(int matrix_size);
 int* init_P(int matrix_size);
 double** init_diagonal_array(int matrix_size);
+
 void lu_decomposition(double **A, int *P, int matrix_size);
+void decompose_A_to_L_U(double **A, double **L, double **U, int matrix_size);
 
 int main(int argc, char **argv)
 {
@@ -51,23 +54,9 @@ int main(int argc, char **argv)
     lu_decomposition(A, P, matrix_size);
   });
 
-  #pragma omp parallel for
-  for (int i = 0; i < matrix_size; i++) {
-    for (int j = 0; j < matrix_size; j++) {
-      if (i > j) {
-        L[i][j] = A[i][j];
-        U[i][j] = 0;
-      } else if (i == j) {
-        L[i][j] = 1;
-        U[i][j] = A[i][j];
-      } else {
-        L[i][j] = 0;
-        U[i][j] = A[i][j];
-      }
-    }
-  }
+  decompose_A_to_L_U(A, L, U, matrix_size);
 
-  cout << compare_two_array(multiply_two_array(L, U, matrix_size), permute_A(A_copy,P,matrix_size), matrix_size) << endl;
+  // cout << compare_two_array(multiply_two_array(L, U, matrix_size), permute_A(A_copy,P,matrix_size), matrix_size) << endl;
 
 
   // Free allocated memory
@@ -277,5 +266,23 @@ void lu_decomposition(double **A, int *P, int matrix_size) {
       }
     }
 
+  }
+}
+
+void decompose_A_to_L_U(double **A, double **L, double **U, int matrix_size) {
+  #pragma omp parallel for
+  for (int i = 0; i < matrix_size; i++) {
+    for (int j = 0; j < matrix_size; j++) {
+      if (i > j) {
+        L[i][j] = A[i][j];
+        U[i][j] = 0;
+      } else if (i == j) {
+        L[i][j] = 1;
+        U[i][j] = A[i][j];
+      } else {
+        L[i][j] = 0;
+        U[i][j] = A[i][j];
+      }
+    }
   }
 }
