@@ -184,15 +184,15 @@ void lu_decomposition(double **A, double **L, double **U, int *P, int matrix_siz
     // Find the maximum element in the k-th column
     #pragma omp parallel shared(max, k_prime)
     { 
-      // Find the maximum element in the k-th column
       // Initialize local variables for each thread
       double local_max = 0.0;
       int local_k_prime = k;
 
       #pragma omp for
       for (int i = k; i < matrix_size; i++) {
-        if (abs(A[i][k]) > local_max) {
-          local_max = abs(A[i][k]);
+        double abs_A_ik = abs(A[i][k]);
+        if (abs_A_ik > local_max) {
+          local_max = abs_A_ik;
           local_k_prime = i;
         }
       }
@@ -212,12 +212,15 @@ void lu_decomposition(double **A, double **L, double **U, int *P, int matrix_siz
       exit(-1);
     }
 
+    
     // Swap rows in P, A, and L
-    swap(P[k], P[k_prime]);
-    swap(A[k], A[k_prime]);
-    #pragma omp parallel for
-    for (int j = 0; j < k; j++) {
-      swap(L[k][j], L[k_prime][j]);
+    if(k!=k_prime) {
+      swap(P[k], P[k_prime]);
+      swap(A[k], A[k_prime]);
+      #pragma omp parallel for
+      for (int j = 0; j < k; j++) {
+        swap(L[k][j], L[k_prime][j]);
+      }
     }
 
     // Update U and L
