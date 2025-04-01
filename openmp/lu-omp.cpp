@@ -3,6 +3,7 @@
 #include <time.h>
 #include <chrono>
 #include <functional>
+#include <map>
 
 using namespace std;
 
@@ -34,29 +35,33 @@ int main(int argc, char **argv)
 
   omp_set_num_threads(nworkers);
 
-  double **A = init_A(matrix_size);
-  int *P = init_P(matrix_size);
-  double **L = init_diagonal_array(matrix_size);
-  double **U = init_diagonal_array(matrix_size);
-
+  double **A;
+  int *P;
+  double **L;
+  double **U;
   double **A_copy = new double*[matrix_size];
-  for (int i = 0; i < matrix_size; i++) {
-    A_copy[i] = new double[matrix_size];
-  }
-  #pragma omp parallel for
-  for (int i = 0; i < matrix_size; i++) {
-    for (int j = 0; j < matrix_size; j++) {
-      A_copy[i][j] = A[i][j];
-    }
-  }
 
   measure_time([&]() {
+    A = init_A(matrix_size);
+    P = init_P(matrix_size);
+    L = init_diagonal_array(matrix_size);
+    U = init_diagonal_array(matrix_size);
+
+    for (int i = 0; i < matrix_size; i++) {
+      A_copy[i] = new double[matrix_size];
+    }
+    #pragma omp parallel for default(none) shared(A_copy, A) firstprivate(matrix_size)
+    for (int i = 0; i < matrix_size; i++) {
+      for (int j = 0; j < matrix_size; j++) {
+        A_copy[i][j] = A[i][j];
+      }
+    }
     lu_decomposition(A, P, matrix_size);
+    decompose_A_to_L_U(A, L, U, matrix_size);
   });
 
-  decompose_A_to_L_U(A, L, U, matrix_size);
 
-  // cout << compare_two_array(multiply_two_array(L, U, matrix_size), permute_A(A_copy,P,matrix_size), matrix_size) << endl;
+  cout << compare_two_array(multiply_two_array(L, U, matrix_size), permute_A(A_copy,P,matrix_size), matrix_size) << endl;
 
 
   // Free allocated memory
@@ -109,7 +114,7 @@ double** multiply_two_array(double** A, double** B, int matrix_size){
     C[i] = new double[matrix_size];
   }
 
-  #pragma omp parallel for
+  #pragma omp parallel for default(none) shared(A, B, C) firstprivate(matrix_size)
   for (int i = 0; i < matrix_size; i++){
     for (int j = 0; j < matrix_size; j++){
       C[i][j] = 0;
@@ -128,7 +133,7 @@ double** permute_A(double **A, int *P, int matrix_size){
     B[i] = new double[matrix_size];
   }
 
-  #pragma omp parallel for
+  #pragma omp parallel for default(none) shared(A, B, P) firstprivate(matrix_size)
   for (int i = 0; i < matrix_size; i++){
     for (int j = 0; j < matrix_size; j++){
       B[i][j] = A[P[i]][j];
@@ -141,7 +146,7 @@ double** permute_A(double **A, int *P, int matrix_size){
 double compare_two_array(double** A, double** B, int matrix_size){
   double diff = 0.0;
 
-  #pragma omp parallel shared(diff)
+  #pragma omp parallel default(none) shared(A, B, diff) firstprivate(matrix_size)
   {
     #pragma omp for reduction(+:diff)
     for (int i = 0; i < matrix_size; i++){
@@ -178,7 +183,7 @@ double** init_A(int matrix_size){
 int* init_P(int matrix_size){
   int *P = new int[matrix_size];
 
-  #pragma omp parallel shared(P)
+  #pragma omp parallel default(none) shared(P) firstprivate(matrix_size)
   {
     #pragma omp for
     for (int i = 0; i < matrix_size; i++){
@@ -192,7 +197,7 @@ int* init_P(int matrix_size){
 double ** init_diagonal_array(int matrix_size){
   double **A = new double*[matrix_size];
 
-  #pragma omp parallel shared(A)
+  #pragma omp parallel default(none) shared(A) firstprivate(matrix_size)
   {
     #pragma omp for  
     for (int i = 0; i < matrix_size; i++){
@@ -217,7 +222,7 @@ void lu_decomposition(double **A, int *P, int matrix_size) {
     int k_prime = k;
 
     // Find the maximum element in the k-th column
-    #pragma omp parallel shared(max, k_prime)
+    #pragma omp parallel default(none) shared(max, k_prime) firstprivate(A, k, matrix_size)
     { 
       // Initialize local variables for each thread
       double local_max = 0.0;
@@ -256,21 +261,29 @@ void lu_decomposition(double **A, int *P, int matrix_size) {
 
     double pivot = A[k][k];
 
-    #pragma omp parallel for
+
+    #pragma omp parallel for default(none) shared(pivot, A, k) firstprivate(matrix_size)
     for (int i = k + 1; i < matrix_size; i++) {
       A[i][k] /= pivot;
       double L_ik = A[i][k];
-      // U의 역할을 하는 A의 상삼각 부분을 갱신합니다.
-      for (int j = k + 1; j < matrix_size; j++) {
-          A[i][j] -= L_ik * A[k][j];
+
+      auto& A_i = A[i];
+      auto& A_k = A[k];
+
+      int block_size = 64;
+      for(int j = k + 1; j < matrix_size; j += block_size) {
+        int end = min(j + block_size, matrix_size);
+        #pragma omp simd
+        for (int l = j; l < end; l++) {
+          A_i[l] -= L_ik * A_k[l];
+        }
       }
     }
-
   }
 }
 
 void decompose_A_to_L_U(double **A, double **L, double **U, int matrix_size) {
-  #pragma omp parallel for
+  #pragma omp parallel for default(none) shared(A, L, U) firstprivate(matrix_size)
   for (int i = 0; i < matrix_size; i++) {
     for (int j = 0; j < matrix_size; j++) {
       if (i > j) {

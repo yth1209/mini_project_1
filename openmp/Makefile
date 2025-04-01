@@ -1,22 +1,18 @@
 EXEC=lu-omp
 OBJ =  $(EXEC) $(EXEC)-debug  $(EXEC)-serial
 
-MATRIX_SIZE=8000
+MATRIX_SIZE=2000
 #MATRIX_SIZE=6
 MATRIX_CHECK_SIZE=100
-W :=`grep processor /proc/cpuinfo | wc -l`
+W=4
 
 CHECKER=inspxe-cl -collect=ti3 -r check
-VIEWER=inspxe-gui check
-REPORTER_PROBLEM=inspxe-cl -report problems -result-dir=./check/check.inspxe > reports/problems.txt
-REPORTER_SUMMARY=inspxe-cl -report summary -result-dir=./check/check.inspxe > reports/summary.txt
-REPORTER_OBSERVATIONS=inspxe-cl -report observations -result-dir=./check/check.inspxe > reports/observations.txt
-REPORTER_STATUS=inspxe-cl -report status -result-dir=./check/check.inspxe > reports/status.txt
 
 # flags
 OPT=-O2 -g
 DEBUG=-O0 -g
 OMP=-fopenmp
+PERF=-fno-omit-frame-pointer
 
 all: $(OBJ)
 
@@ -32,6 +28,9 @@ $(EXEC)-serial: $(EXEC).cpp
 # build the optimized parallel version of the program
 $(EXEC): $(EXEC).cpp
 	g++ $(OPT) $(OMP) -o $(EXEC) $(EXEC).cpp -lrt
+
+$(EXEC)-perf: $(EXEC).cpp
+	g++ $(OPT) ${PERF} $(OMP) -o $(EXEC)-perf $(EXEC).cpp -lrt
 
 #run the optimized program in parallel
 runp: $(EXEC)
@@ -56,10 +55,11 @@ view:
 clean:
 	/bin/rm -rf $(OBJ) check reports/*
 
-report: 
-	mkdir -p reports; \
-	$(REPORTER_PROBLEM); \
-	$(REPORTER_SUMMARY); \
-	$(REPORTER_OBSERVATIONS); \
-	$(REPORTER_STATUS)
+perf_stat: $(EXEC)-perf
+	@echo "perf report"
+	perf stat ./$(EXEC)-perf $(MATRIX_SIZE) $(W)
 
+perf_record: $(EXEC)-perf
+	@echo "perf report"
+	perf record -g ./$(EXEC)-perf $(MATRIX_SIZE) $(W); \
+	perf report;
