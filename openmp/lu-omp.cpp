@@ -60,8 +60,9 @@ int main(int argc, char **argv)
     decompose_A_to_L_U(A, L, U, matrix_size);
   });
 
-
-  cout << compare_two_array(multiply_two_array(L, U, matrix_size), permute_A(A_copy,P,matrix_size), matrix_size) << endl;
+  measure_time([&]() {
+    cout << compare_two_array(multiply_two_array(L, U, matrix_size), permute_A(A_copy,P,matrix_size), matrix_size) << endl;
+  });
 
 
   // Free allocated memory
@@ -114,15 +115,29 @@ double** multiply_two_array(double** A, double** B, int matrix_size){
     C[i] = new double[matrix_size];
   }
 
-  #pragma omp parallel for default(none) shared(A, B, C) firstprivate(matrix_size)
+  double ** B_T = new double*[matrix_size];
+  #pragma omp parallel for default(none) shared(B, B_T) firstprivate(matrix_size)
+  for (int i = 0; i < matrix_size; i++){
+    B_T[i] = new double[matrix_size];
+    for (int j = 0; j < matrix_size; j++){
+      B_T[i][j] = B[j][i];
+    }
+  }
+
+  #pragma omp parallel for default(none) shared(A, B_T, C) firstprivate(matrix_size)
   for (int i = 0; i < matrix_size; i++){
     for (int j = 0; j < matrix_size; j++){
       C[i][j] = 0;
       for (int k = 0; k < matrix_size; k++){
-        C[i][j] += A[i][k] * B[k][j];
+        C[i][j] += A[i][k] * B_T[j][k];
       }
     }
   }
+
+  for (int i = 0; i < matrix_size; i++){
+    delete[] B_T[i];
+  }
+  delete[] B_T;
 
   return C;
 }
