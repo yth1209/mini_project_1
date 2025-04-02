@@ -17,6 +17,7 @@ double compare_two_array(double** A, double** B, int matrix_size);
 double** init_A(int matrix_size);
 int* init_P(int matrix_size);
 double** init_diagonal_array(int matrix_size);
+double** copy_matrix(double **A, int matrix_size);
 
 void lu_decomposition(double **A, int *P, int matrix_size);
 void decompose_A_to_L_U(double **A, double **L, double **U, int matrix_size);
@@ -59,16 +60,8 @@ int main(int argc, char **argv)
     P = init_P(matrix_size);
     L = init_diagonal_array(matrix_size);
     U = init_diagonal_array(matrix_size);
+    A_copy = copy_matrix(A, matrix_size);
 
-    for (int i = 0; i < matrix_size; i++) {
-      A_copy[i] = new double[matrix_size];
-    }
-    #pragma omp parallel for default(none) shared(A_copy, A) firstprivate(matrix_size)
-    for (int i = 0; i < matrix_size; i++) {
-      for (int j = 0; j < matrix_size; j++) {
-        A_copy[i][j] = A[i][j];
-      }
-    }
     lu_decomposition(A, P, matrix_size);
     decompose_A_to_L_U(A, L, U, matrix_size);
   });
@@ -233,6 +226,18 @@ double ** init_diagonal_array(int matrix_size){
   }
 
   return A;
+}
+
+double** copy_matrix(double **A, int matrix_size){
+  double **A_copy = new double*[matrix_size];
+  #pragma omp parallel for default(none) shared(A_copy, A) firstprivate(matrix_size)
+  for (int i = 0; i < matrix_size; i++) {
+    A_copy[i] = new double[matrix_size];
+    for (int j = 0; j < matrix_size; j++) {
+      A_copy[i][j] = A[i][j];
+    }
+  }
+  return A_copy;
 }
 
 void lu_decomposition(double **A, int *P, int matrix_size) {
