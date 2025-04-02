@@ -295,14 +295,11 @@ void lu_decomposition(double **A, int *P, int matrix_size) {
       auto& A_i = A[i];
       auto& A_k = A[k];
 
-      int block_size = 64;
-      for(int j = k + 1; j < matrix_size; j += block_size) {
-        int end = min(j + block_size, matrix_size);
-        #pragma omp simd
-        for (int l = j; l < end; l++) {
-          A_i[l] -= L_ik * A_k[l];
-        }
+      #pragma omp simd
+      for (int j = k+1; j < matrix_size; j++) {
+        A_i[j] -= L_ik * A_k[j];
       }
+
     }
   }
 }
