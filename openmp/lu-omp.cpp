@@ -7,20 +7,18 @@
 
 using namespace std;
 
-void print_array(double **A, int matrix_size);
-void print_measure_time(function<void()> function);
 double measure_time(function<void()> function);
 
 double** multiply_two_array(double* const* A, double* const* B, int matrix_size);
 double** permute_A(double* const* A, const int *P, int matrix_size);
-double compare_two_array(double* const* A, double* const* B, int matrix_size);
+double l1_norm(double* const* A, double* const* B, int matrix_size);
 
 double** init_A(int matrix_size);
 int* init_P(int matrix_size);
 double** copy_matrix(double* const* A, int matrix_size);
 
 void lu_decomposition(double **A, int *P, int matrix_size);
-void decompose_A_to_L_U(double* const* A, double **L, double **U, int matrix_size);
+void decomposed_A_to_LU(double* const* A, double **L, double **U, int matrix_size);
 
 
 void usage(const char *name)
@@ -49,61 +47,61 @@ int main(int argc, char **argv)
 
   omp_set_num_threads(nworkers);
 
-  double **A;
-  int *P;
+
+  double **A = init_A(matrix_size);
+  int *P = init_P(matrix_size);
   double **L = new double*[matrix_size];
   double **U = new double*[matrix_size];
-  double **A_copy = new double*[matrix_size];
 
-  cout << "LU decomposition Start" << endl;
-  print_measure_time([&]() { 
-    A = init_A(matrix_size);
-    P = init_P(matrix_size); 
-    A_copy = copy_matrix(A, matrix_size);
-    lu_decomposition(A, P, matrix_size);
-    decompose_A_to_L_U(A, L, U, matrix_size);
+  double **A_parallel = copy_matrix(A, matrix_size);
+
+  double decom_parallel_t = measure_time([&]() { 
+    lu_decomposition(A_parallel, P, matrix_size);
+    decomposed_A_to_LU(A_parallel, L, U, matrix_size);
+  });
+  double norm_parallel_t = measure_time([&]() {
+    // l1_norm(multiply_two_array(L, U, matrix_size), permute_A(A,P,matrix_size), matrix_size);
   });
 
-  cout << "L1 Norm Start " << endl;
-  print_measure_time([&]() {
-    cout << "L1 Norm Result: " << compare_two_array(multiply_two_array(L, U, matrix_size), permute_A(A_copy,P,matrix_size), matrix_size) << endl;
+
+  for (int i = 0; i < matrix_size; i++) {
+    delete[] L[i];
+    delete[] U[i];
+  }
+  delete P;
+
+  P = init_P(matrix_size);
+  double **A_single = copy_matrix(A, matrix_size);
+
+  omp_set_num_threads(1);
+  double decom_single_t = measure_time([&]() { 
+    lu_decomposition(A_single, P, matrix_size);
+    decomposed_A_to_LU(A_single, L, U, matrix_size);
+  });
+  double norm_single_t = measure_time([&]() {
+    // l1_norm(multiply_two_array(L, U, matrix_size), permute_A(A,P,matrix_size), matrix_size);
   });
 
+  cout << "Total Parallel Efficiency: " << (decom_single_t + norm_single_t) / (nworkers * (decom_parallel_t + norm_parallel_t)) << endl;
+  cout << "LU Decomposition Parallel Efficiency: " << decom_single_t / (nworkers * decom_parallel_t) << endl;
+  cout << "L1 Norm Parallel Efficiency: " <<  norm_single_t / (nworkers * norm_parallel_t) << endl;
 
   // Free allocated memory
   for (int i = 0; i < matrix_size; i++) {
     delete[] A[i];
     delete[] L[i];
     delete[] U[i];
+    delete[] A_parallel[i];
+    delete[] A_single[i];
   }
   delete[] A;
   delete[] L;
   delete[] U;
   delete[] P;
+  delete[] A_parallel;
+  delete[] A_single;
 
   return 0;
-}
-
-void print_array(double **A, int matrix_size){
-  cout << "Print Array Start" << endl;
-  for(int i = 0; i < matrix_size; i++){
-    for(int j = 0; j < matrix_size; j++){
-      cout << A[i][j] << " ";
-    }
-    cout << endl; 
-  }
-
-  cout << "Print Array End" << endl;
-}
-
-void print_measure_time(function<void()> function){
-  auto start = std::chrono::high_resolution_clock::now();
-
-  function();
-
-  auto end = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double> elapsed = end - start;
-  std::cout << "Elapsed time: " << elapsed.count() << " seconds\n";
 }
 
 double measure_time(function<void()> function){
@@ -113,15 +111,11 @@ double measure_time(function<void()> function){
 
   auto end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> elapsed = end - start;
-
   return elapsed.count();
 }
 
 double** multiply_two_array(double* const* A, double* const* B, int matrix_size){
   double **C = new double*[matrix_size];
-  for (int i = 0; i < matrix_size; i++){
-    C[i] = new double[matrix_size];
-  }
 
   double ** B_T = new double*[matrix_size];
   #pragma omp parallel for default(none) shared(B, B_T) firstprivate(matrix_size)
@@ -134,6 +128,7 @@ double** multiply_two_array(double* const* A, double* const* B, int matrix_size)
 
   #pragma omp parallel for default(none) shared(A, B_T, C) firstprivate(matrix_size)
   for (int i = 0; i < matrix_size; i++){
+    C[i] = new double[matrix_size];
     for (int j = 0; j < matrix_size; j++){
       double sum = 0;
       #pragma omp simd
@@ -168,7 +163,7 @@ double** permute_A(double* const*A, const int *P, int matrix_size){
   return B;
 }
 
-double compare_two_array(double* const* A, double* const* B, int matrix_size){
+double l1_norm(double* const* A, double* const* B, int matrix_size){
   double diff = 0.0;
 
   #pragma omp parallel for reduction(+:diff) default(none) shared(A, B) firstprivate(matrix_size)
@@ -268,12 +263,10 @@ void lu_decomposition(double **A, int *P, int matrix_size) {
     }
 
     
-    // Swap rows in P, A, and L
+    // Swap rows in P, A
     if(k!=k_prime) {
-      measure_time([&](){
-        swap(P[k], P[k_prime]);
-        swap(A[k], A[k_prime]);
-      });
+      swap(P[k], P[k_prime]);
+      swap(A[k], A[k_prime]);
     }
 
     double pivot = A[k][k];
@@ -295,8 +288,8 @@ void lu_decomposition(double **A, int *P, int matrix_size) {
   }
 }
 
-void decompose_A_to_L_U(double* const* A, double **L, double **U, int matrix_size) {
-  // #pragma omp parallel for default(none) shared(A, L, U) firstprivate(matrix_size)
+void decomposed_A_to_LU(double* const* A, double **L, double **U, int matrix_size) {
+  #pragma omp parallel for default(none) shared(A, L, U) firstprivate(matrix_size) schedule(dynamic)
   for (int i = 0; i < matrix_size; i++) {
     L[i] = new double[matrix_size]; 
     U[i] = new double[matrix_size];
