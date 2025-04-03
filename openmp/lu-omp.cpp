@@ -7,20 +7,16 @@
 
 using namespace std;
 
-void print_array(double **A, int matrix_size);
-void print_measure_time(function<void()> function);
-double measure_time(function<void()> function);
-
 double** multiply_two_array(double* const* A, double* const* B, int matrix_size);
-double** permute_A(double* const* A, const int *P, int matrix_size);
-double compare_two_array(double* const* A, double* const* B, int matrix_size);
+double** mutliply_P_A(double* const* A, const int *P, int matrix_size);
+double L1_norm(double* const* A, double* const* B, int matrix_size);
 
 double** init_A(int matrix_size);
 int* init_P(int matrix_size);
 double** copy_matrix(double* const* A, int matrix_size);
 
 void lu_decomposition(double **A, int *P, int matrix_size);
-void decompose_A_to_L_U(double* const* A, double **L, double **U, int matrix_size);
+void decomposed_A_to_L_U(double* const* A, double **L, double **U, int matrix_size);
 
 
 void usage(const char *name)
@@ -49,26 +45,23 @@ int main(int argc, char **argv)
 
   omp_set_num_threads(nworkers);
 
+  
   double **A;
   int *P;
   double **L = new double*[matrix_size];
   double **U = new double*[matrix_size];
   double **A_copy = new double*[matrix_size];
 
-  cout << "LU decomposition Start" << endl;
-  print_measure_time([&]() { 
-    A = init_A(matrix_size);
-    P = init_P(matrix_size); 
-    A_copy = copy_matrix(A, matrix_size);
-    lu_decomposition(A, P, matrix_size);
-    decompose_A_to_L_U(A, L, U, matrix_size);
-  });
+  A = init_A(matrix_size);
+  P = init_P(matrix_size); 
+  A_copy = copy_matrix(A, matrix_size);
 
-  cout << "L1 Norm Start " << endl;
-  print_measure_time([&]() {
-    cout << "L1 Norm Result: " << compare_two_array(multiply_two_array(L, U, matrix_size), permute_A(A_copy,P,matrix_size), matrix_size) << endl;
-  });
+  lu_decomposition(A, P, matrix_size);
+  decomposed_A_to_L_U(A, L, U, matrix_size);
 
+  double ** LU = multiply_two_array(L, U, matrix_size);
+  double ** PA = mutliply_P_A(A_copy, P, matrix_size);
+  cout << "L1 Norm Result: " << L1_norm(LU, PA, matrix_size) << endl;
 
   // Free allocated memory
   for (int i = 0; i < matrix_size; i++) {
@@ -81,48 +74,17 @@ int main(int argc, char **argv)
   delete[] U;
   delete[] P;
 
-  return 0;
+return 0;
 }
 
-void print_array(double **A, int matrix_size){
-  cout << "Print Array Start" << endl;
-  for(int i = 0; i < matrix_size; i++){
-    for(int j = 0; j < matrix_size; j++){
-      cout << A[i][j] << " ";
-    }
-    cout << endl; 
-  }
-
-  cout << "Print Array End" << endl;
-}
-
-void print_measure_time(function<void()> function){
-  auto start = std::chrono::high_resolution_clock::now();
-
-  function();
-
-  auto end = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double> elapsed = end - start;
-  std::cout << "Elapsed time: " << elapsed.count() << " seconds\n";
-}
-
-double measure_time(function<void()> function){
-  auto start = std::chrono::high_resolution_clock::now();
-
-  function();
-
-  auto end = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double> elapsed = end - start;
-
-  return elapsed.count();
-}
-
+//output: AxB
 double** multiply_two_array(double* const* A, double* const* B, int matrix_size){
   double **C = new double*[matrix_size];
   for (int i = 0; i < matrix_size; i++){
     C[i] = new double[matrix_size];
   }
 
+  // Transpose B
   double ** B_T = new double*[matrix_size];
   #pragma omp parallel for default(none) shared(B, B_T) firstprivate(matrix_size)
   for (int i = 0; i < matrix_size; i++){
@@ -152,7 +114,7 @@ double** multiply_two_array(double* const* A, double* const* B, int matrix_size)
   return C;
 }
 
-double** permute_A(double* const*A, const int *P, int matrix_size){
+double** mutliply_P_A(double* const*A, const int *P, int matrix_size){
   double **B = new double*[matrix_size];
   for (int i = 0; i < matrix_size; i++){
     B[i] = new double[matrix_size];
@@ -168,7 +130,7 @@ double** permute_A(double* const*A, const int *P, int matrix_size){
   return B;
 }
 
-double compare_two_array(double* const* A, double* const* B, int matrix_size){
+double L1_norm(double* const* A, double* const* B, int matrix_size){
   double diff = 0.0;
 
   #pragma omp parallel for reduction(+:diff) default(none) shared(A, B) firstprivate(matrix_size)
@@ -179,7 +141,7 @@ double compare_two_array(double* const* A, double* const* B, int matrix_size){
     }
   }
 
-  return diff / matrix_size;
+  return diff;
 }
 
 double** init_A(int matrix_size){
@@ -270,10 +232,8 @@ void lu_decomposition(double **A, int *P, int matrix_size) {
     
     // Swap rows in P, A, and L
     if(k!=k_prime) {
-      measure_time([&](){
-        swap(P[k], P[k_prime]);
-        swap(A[k], A[k_prime]);
-      });
+      swap(P[k], P[k_prime]);
+      swap(A[k], A[k_prime]);
     }
 
     double pivot = A[k][k];
@@ -295,7 +255,7 @@ void lu_decomposition(double **A, int *P, int matrix_size) {
   }
 }
 
-void decompose_A_to_L_U(double* const* A, double **L, double **U, int matrix_size) {
+void decomposed_A_to_L_U(double* const* A, double **L, double **U, int matrix_size) {
   // #pragma omp parallel for default(none) shared(A, L, U) firstprivate(matrix_size)
   for (int i = 0; i < matrix_size; i++) {
     L[i] = new double[matrix_size]; 
