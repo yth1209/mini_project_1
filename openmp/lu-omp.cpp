@@ -53,16 +53,16 @@ int main(int argc, char **argv)
   double **L = new double*[matrix_size];
   double **U = new double*[matrix_size];
 
-  double **A_parallel = copy_matrix(A, matrix_size);
+  double **A_single = copy_matrix(A, matrix_size);
 
-  double decom_parallel_t = measure_time([&]() { 
-    lu_decomposition(A_parallel, P, matrix_size);
-    decomposed_A_to_LU(A_parallel, L, U, matrix_size);
+  double decom_single_t = measure_time([&]() { 
+    omp_set_num_threads(1);
+    lu_decomposition(A_single, P, matrix_size);
+    decomposed_A_to_LU(A_single, L, U, matrix_size);
   });
-  double norm_parallel_t = measure_time([&]() {
-    // l1_norm(multiply_two_array(L, U, matrix_size), permute_A(A,P,matrix_size), matrix_size);
+  double norm_single_t = measure_time([&]() {
+    l1_norm(multiply_two_array(L, U, matrix_size), permute_A(A,P,matrix_size), matrix_size);
   });
-
 
   for (int i = 0; i < matrix_size; i++) {
     delete[] L[i];
@@ -70,17 +70,19 @@ int main(int argc, char **argv)
   }
   delete P;
 
-  P = init_P(matrix_size);
-  double **A_single = copy_matrix(A, matrix_size);
 
-  omp_set_num_threads(1);
-  double decom_single_t = measure_time([&]() { 
-    lu_decomposition(A_single, P, matrix_size);
-    decomposed_A_to_LU(A_single, L, U, matrix_size);
+  double **A_parallel = copy_matrix(A, matrix_size);
+  P = init_P(matrix_size);
+
+  double decom_parallel_t = measure_time([&]() { 
+    omp_set_num_threads(nworkers);
+    lu_decomposition(A_parallel, P, matrix_size);
+    decomposed_A_to_LU(A_parallel, L, U, matrix_size);
   });
-  double norm_single_t = measure_time([&]() {
-    // l1_norm(multiply_two_array(L, U, matrix_size), permute_A(A,P,matrix_size), matrix_size);
+  double norm_parallel_t = measure_time([&]() {
+    l1_norm(multiply_two_array(L, U, matrix_size), permute_A(A,P,matrix_size), matrix_size);
   });
+  
 
   cout << "Total Parallel Efficiency: " << (decom_single_t + norm_single_t) / (nworkers * (decom_parallel_t + norm_parallel_t)) << endl;
   cout << "LU Decomposition Parallel Efficiency: " << decom_single_t / (nworkers * decom_parallel_t) << endl;
@@ -230,7 +232,7 @@ void lu_decomposition(double **A, int *P, int matrix_size) {
     // Pivoting
     double max = 0.0;
     int k_prime = k;
-    
+
     // Find the maximum element in the k-th column
     #pragma omp parallel default(none) shared(max, k_prime) firstprivate(A, k, matrix_size)
     { 
@@ -274,17 +276,17 @@ void lu_decomposition(double **A, int *P, int matrix_size) {
 
 
     #pragma omp parallel for default(none) shared(pivot, A, A_k, k) firstprivate(matrix_size) schedule(dynamic)
-    for (int i = k + 1; i < matrix_size; i++) {
-      A[i][k] /= pivot;
-      double L_ik = A[i][k];
-
-      auto& A_i = A[i];
-
-      #pragma omp simd
-      for (int j = k+1; j < matrix_size; j++) {
-        A_i[j] -= L_ik * A_k[j];
+      for (int i = k + 1; i < matrix_size; i++) {
+        A[i][k] /= pivot;
+        double L_ik = A[i][k];
+  
+        auto& A_i = A[i];
+  
+        #pragma omp simd
+        for (int j = k+1; j < matrix_size; j++) {
+          A_i[j] -= L_ik * A_k[j];
+        }
       }
-    }
   }
 }
 
