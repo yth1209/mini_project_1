@@ -1,18 +1,17 @@
 EXEC=lu-omp
 OBJ =  $(EXEC) $(EXEC)-debug  $(EXEC)-serial
 
-MATRIX_SIZE=2000
-#MATRIX_SIZE=6
+MATRIX_SIZE=8000
 MATRIX_CHECK_SIZE=100
-W=4
+W :=`grep processor /proc/cpuinfo | wc -l`
 
 CHECKER=inspxe-cl -collect=ti3 -r check
+VIEWER=inspxe-gui check
 
 # flags
 OPT=-O2 -g
 DEBUG=-O0 -g
 OMP=-fopenmp
-PERF=-fno-omit-frame-pointer
 
 all: $(OBJ)
 
@@ -28,9 +27,6 @@ $(EXEC)-serial: $(EXEC).cpp
 # build the optimized parallel version of the program
 $(EXEC): $(EXEC).cpp
 	g++ $(OPT) $(OMP) -o $(EXEC) $(EXEC).cpp -lrt
-
-$(EXEC)-perf: $(EXEC).cpp
-	g++ $(OPT) ${PERF} $(OMP) -o $(EXEC)-perf $(EXEC).cpp -lrt
 
 #run the optimized program in parallel
 runp: $(EXEC)
@@ -53,13 +49,4 @@ view:
 
 
 clean:
-	/bin/rm -rf $(OBJ) check reports/*
-
-perf_stat: $(EXEC)-perf
-	@echo "perf report"
-	perf stat ./$(EXEC)-perf $(MATRIX_SIZE) $(W)
-
-perf_record: $(EXEC)-perf
-	@echo "perf report"
-	perf record -g ./$(EXEC)-perf $(MATRIX_SIZE) $(W); \
-	perf report;
+	/bin/rm -rf $(OBJ) check
